@@ -3,7 +3,7 @@ package services
 import (
 	"github.com/aws/aws-sdk-go/service/route53domains"
 	"fmt"
-	"github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
+	"github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 )
 
 type DomainRegistrationInProgressError struct {

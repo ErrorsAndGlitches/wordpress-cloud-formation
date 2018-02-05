@@ -51,7 +51,7 @@ go get -u github.com/kardianos/govendor
 
 This will pull the code and the dependencies, putting the dependencies in `${PROJECT_ROOT}/vendor/`
 ```
-govendor get github.com/ColectivaLegal/sms-alert-system-cloud-formation
+govendor get github.com/ErrorsAndGlitches/wordpress-cloud-formation
 ```
 The dependencies are defined in `./vendor/vendor.json`.
 

@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/route53domains"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 )
 
 var regionFilterKey = "region-name"

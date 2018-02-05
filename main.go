@@ -1,10 +1,10 @@
 package main
 
 import (
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/cli"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/services"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/template-rsrcs"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/cli"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/services"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/template-rsrcs"
 	. "github.com/crewjam/go-cloudformation"
 	"github.com/urfave/cli"
 	"os"

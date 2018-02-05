@@ -16,4 +16,4 @@ vendor/github.com/
 vendor/go.uber.org/
 
 .idea
-sms-alert-system-cloud-formation
+wordpress-cloud-formation

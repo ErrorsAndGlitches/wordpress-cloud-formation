@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 	"github.com/aws/aws-sdk-go/service/route53domains"
 )
 

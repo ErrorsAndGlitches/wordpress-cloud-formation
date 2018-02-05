@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
-	"github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
+	"github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 )
 
 var prefix = ""

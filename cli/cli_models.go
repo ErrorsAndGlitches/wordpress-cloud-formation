@@ -2,8 +2,8 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/services"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/services"
 )
 
 var defaultProfile = "default"

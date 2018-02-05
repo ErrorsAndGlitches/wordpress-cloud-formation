@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	. "github.com/crewjam/go-cloudformation"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"strconv"
 )

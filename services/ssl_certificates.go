@@ -6,7 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/avast/retry-go"
 	"time"
-	. "github.com/ColectivaLegal/sms-alert-system-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 )
 
 const sslMaxAttempts = 5
