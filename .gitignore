@@ -17,3 +17,5 @@ vendor/go.uber.org/
 
 .idea
 wordpress-cloud-formation
+wp-service-cf-Gamma.json
+wp-service-cf-Prod.json

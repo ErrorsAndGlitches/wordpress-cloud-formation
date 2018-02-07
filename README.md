@@ -1,8 +1,12 @@
+# TODO
+
+* Put WordPress Resources in S3 and put this in the architecture diagram
+* Add more disk space to the host
+* Add required information to the Output of the stack e.g. ELB DNS name, hosted zone
+
 # wordpress-cloud-formation
 
 Cloud formation project for deploying WordPress on AWS.
-
-> **THIS PROJECT IS UNDER DEVELOPMENT**
 
 # Table of Contents
 
@@ -133,6 +137,9 @@ SSL certificate.
 ./wordpress-cloud-formation -s Gamma -r us-east-1 describe-hosted-zone -d wordpress-domain.com
 ```
 
+Make sure that the name servers in the created hosted zone are the same ones registered under the domain in Route 53. If
+they are out of sync, copy the name servers listed in the hosted zone to the domain name configuration.
+
 ### Setup the SSL Certificate
 
 Use the Hosted Zone ID from the previous step to setup SSL. The default region can be used here.
@@ -140,10 +147,12 @@ Use the Hosted Zone ID from the previous step to setup SSL. The default region c
 ./wordpress-cloud-formation -s Gamma setup-ssl -d wordpress-domain.com -z "/hostedzone/00000000000000"
 ```
 
-It can take up to 30 minutes for the certificate to be validated. You can run this command to see its current status:
+It can take up to [3-4 hours][] for the certificate to be validated. You can run this command to see its current status:
 ```
 ./wordpress-cloud-formation describe-ssl --ssl-arn "arn:aws:acm:us-west-2:000000000000:certificate/00000000-0000-0000-0000-000000000000"
 ```
+
+[3-4 hours]: https://forums.aws.amazon.com/thread.jspa?threadID=249259
 
 ## Create the Service Stack
 
@@ -179,10 +188,14 @@ Note that the ELB created in the stack is an application ELB. The information ca
   -z Z0000000000000 \
   -e LoadBalancerGamma-0000000000.us-west-2.elb.amazonaws.com \
   -n Z111111111111
+  -w "wordpress_one_name:wordpress_two_name:wordpress_three_name"
 ```
-The Record Set should update instantaneously.
+An alias is created for every subdomain, but not for the root host.  The Record Set will take about 5-10 minutes to
+update. You can verify that the domain name can be resolved by using the `dig` tool e.g. `dig wordpress-domain.com`. You
+can also use the [Route 53 DNS Response Tool](), though that won't prove that client side resolution is working.
 
 [ELB Region]: https://docs.aws.amazon.com/general/latest/gr/rande.html#elb_region
+[Route 53 DNS Response Tool]: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/dns-test.html
 
 # Contributing
 
@@ -209,6 +222,10 @@ export DEBUG=1
 ## Gotchas
 
 * Note that the **Registrant Contact** in Route 53 Domains is also known as the **Bill Contact**.
+* The target group health checks deem both `200` and `302` as health return codes. This is because when Wordpress first
+  starts up, all traffic is redirected to the path `/wp-admin/install.php`.
+* If you mess up the Route 53 record set, you should delete it and create a new one to force the changes to be
+  propagated. Otherwise, you are at the mercy of the TTL.
 
 # References
 

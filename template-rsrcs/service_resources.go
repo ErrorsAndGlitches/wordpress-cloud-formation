@@ -5,35 +5,16 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	. "github.com/crewjam/go-cloudformation"
 	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/template-rsrcs/constants"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/template-rsrcs/cf_funcs"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
-	"strconv"
+	"github.com/ErrorsAndGlitches/wordpress-cloud-formation/template-rsrcs/wp"
 )
 
-var allIps = "0.0.0.0/0"
-var httpsPort int64 = 443
-var sshPort int64 = 22
-var nfsPort int64 = 2049
-var scalaPlayPort int64 = 9000
-var allProtocols = "-1"
-var tcpProtocol = "tcp"
-var httpProtocol = "HTTP"
-var httpsProtocol = "HTTPS"
-var oneCpu int64 = 1024             // in ECS, there are 1024 units per VCPU
-var memoryPerInstanceMb int64 = 992 // based on EC2 t2.micro
-var databaseContainerName = "AlertSysDbContainer"
-var databaseEcsVolumeName = String("DatabaseVolume")
 var numSubnets = 3
 
-var MysqlPasswordParamName = "MysqlPassword"
-var DomainNameParamName = "DomainName"
-var CertificateArnParamName = "CertificateArn"
-var TwilioUserParamName = "TwilioUser"
-var TwilioPasswordParamName = "TwilioPassword"
-var TwilioPhoneParamName = "TwilioPhone"
-var PlayFwkSecretKeyParamName = "PlaySecretKey"
-
 type ServiceParameters struct {
-	Config *AlertSysConfig
+	Config *TemplateConfig
 }
 
 func (s *ServiceParameters) AddToTemplate(template *Template) {
@@ -48,7 +29,7 @@ func (s *ServiceParameters) AddToTemplate(template *Template) {
 	template.Parameters[DomainNameParamName] = &Parameter{
 		AllowedPattern:        "[a-zA-Z][a-zA-Z0-9-]*.[a-zA-Z]+",
 		ConstraintDescription: "must be a URL",
-		Description:           "Domain name for the alert system",
+		Description:           "Domain name for the system",
 		Type:                  "String",
 	}
 	template.Parameters[CertificateArnParamName] = &Parameter{
@@ -57,35 +38,16 @@ func (s *ServiceParameters) AddToTemplate(template *Template) {
 		Description:           "AWS ACM Certificate ARN",
 		Type:                  "String",
 	}
-	template.Parameters[TwilioUserParamName] = &Parameter{
-		AllowedPattern:        ".+",
-		ConstraintDescription: "must be at least one character",
-		Description:           "Twilio account user name",
-		Type:                  "String",
-	}
-	template.Parameters[TwilioPasswordParamName] = &Parameter{
-		AllowedPattern:        ".+",
-		ConstraintDescription: "must be at least one character. it really should be more. like srsly.",
-		Description:           "Twilio account password",
-		Type:                  "String",
-	}
-	template.Parameters[TwilioPhoneParamName] = &Parameter{
-		AllowedPattern:        "\\+1[0-9]{10}",
-		ConstraintDescription: "must be a phone number with '+1' followed by 10 digits",
-		Description:           "Twilio phone number",
-		Type:                  "String",
-	}
-	template.Parameters[PlayFwkSecretKeyParamName] = &Parameter{
-		AllowedPattern:        ".+",
-		ConstraintDescription: "must be at least one character. it really should be more. like srsly.",
-		Description:           "Play framework secret key",
+	template.Parameters[Ec2KeyNameParamName] = &Parameter{
+		AllowedPattern:        "[a-zA-Z][a-zA-Z0-9-]*",
+		ConstraintDescription: "must begin with a letter and contain only alphanumeric characters",
+		Description:           "AWS EC2 key name for SSH'ing into hosts",
 		Type:                  "String",
 	}
 }
 
 func (s *ServiceParameters) CloudFormationParameters(
-	dbPassword string, domainName string, certArn string, twilioUser string, twilioPassword string, twilioPhone string,
-	playFwkSecretKey string,
+	dbPassword string, domainName string, certArn string, ec2KeyName string,
 ) []*cloudformation.Parameter {
 
 	return []*cloudformation.Parameter{
@@ -102,28 +64,17 @@ func (s *ServiceParameters) CloudFormationParameters(
 			ParameterValue: &certArn,
 		},
 		{
-			ParameterKey:   &TwilioUserParamName,
-			ParameterValue: &twilioUser,
-		},
-		{
-			ParameterKey:   &TwilioPasswordParamName,
-			ParameterValue: &twilioPassword,
-		},
-		{
-			ParameterKey:   &TwilioPhoneParamName,
-			ParameterValue: &twilioPhone,
-		},
-		{
-			ParameterKey:   &PlayFwkSecretKeyParamName,
-			ParameterValue: &playFwkSecretKey,
+			ParameterKey:   &Ec2KeyNameParamName,
+			ParameterValue: &ec2KeyName,
 		},
 	}
 }
 
 type ServiceResources struct {
-	Template *Template
-	Config   *AlertSysConfig
-	AZs      []*ec2.AvailabilityZone
+	Template            *Template
+	Config              *TemplateConfig
+	AZs                 []*ec2.AvailabilityZone
+	WordPressSubDomains []string
 }
 
 func (s *ServiceResources) AddToTemplate() {
@@ -131,7 +82,6 @@ func (s *ServiceResources) AddToTemplate() {
 
 	s.addVPC()
 	s.addSubnets()
-	s.addLaunchConfiguration()
 	s.addEc2IamInstanceProfile()
 	s.addEc2Role()
 	s.addEc2SecurityGroup()
@@ -142,20 +92,18 @@ func (s *ServiceResources) AddToTemplate() {
 	s.addSubnetRouteTableAssociations()
 
 	s.addLoadBalancer()
-	s.addElbListener()
-	s.addElbListenerRule()
 	s.addLoadBalancerSecurityGroup()
-	s.addLoadBalancerTargetGroup()
-
 	s.addEfsVolume()
-	s.addEfsMountTargets()
 
-	s.addEcsAsg()
-	s.addEcsService()
-	s.addEcsCluster()
-	s.addEcsTaskDef()
-	s.addEcsServiceRole()
-	s.addLogGroup()
+	// add wp stuff here
+	wpResources := wp.NewWordPressResources(
+		s.Template, s.Config, s.elbLogicalName(), s.WordPressSubDomains,
+		Ref(s.vpcLogicalName()), s.ec2SecurityGroupRefStringExpr(), Ref(s.elbSecurityGroupLogicalName()).String(),
+	)
+	wpResources.AddToTemplate()
+
+	s.addLaunchConfiguration(wpResources.EcsClusterLogicalName())
+	s.addAsg()
 
 	s.addOutputs()
 }
@@ -172,14 +120,6 @@ func (s *ServiceResources) addOutputs() {
 	}
 }
 
-func (s *ServiceResources) stackName() RefFunc {
-	return Ref("AWS::StackName")
-}
-
-func (s *ServiceResources) region() RefFunc {
-	return Ref("AWS::Region")
-}
-
 func (s *ServiceResources) elbLogicalName() string {
 	return s.Config.CfName("AppLoadBalancer")
 }
@@ -188,16 +128,12 @@ func (s *ServiceResources) elbSecurityGroupLogicalName() string {
 	return s.Config.CfName("LBSecurityGroup")
 }
 
-func (s *ServiceResources) elbTargetGroupLogicalName() string {
-	return s.Config.CfName("LBTargetGroup")
-}
-
-func (s *ServiceResources) elbListenerLogicalName() string {
-	return s.Config.CfName("ElbHttpsListener")
-}
-
 func (s *ServiceResources) ec2SecurityGroupLogicalName() string {
 	return s.Config.CfName("Ec2SecurityGroup")
+}
+
+func (s *ServiceResources) ec2SecurityGroupRefStringExpr() *StringExpr {
+	return Ref(s.Config.CfName("Ec2SecurityGroup")).String()
 }
 
 func (s *ServiceResources) ec2InstanceProfileLogicalName() string {
@@ -232,28 +168,8 @@ func (s *ServiceResources) launchConfigLogicalName() string {
 	return s.Config.CfName("EcsLaunchConfig")
 }
 
-func (s *ServiceResources) ecsClusterLogicalName() string {
-	return s.Config.CfName("EcsCluster")
-}
-
 func (s *ServiceResources) efsLogicalName() string {
 	return s.Config.CfName("Efs")
-}
-
-func (s *ServiceResources) ecsTaskDefLogicalName() string {
-	return s.Config.CfName("AlertSysTaskDef")
-}
-
-func (s *ServiceResources) ecsServiceContainerName() string {
-	return s.Config.CfName("AlertServiceEcsContainer")
-}
-
-func (s *ServiceResources) ecsServiceRoleLogicalName() string {
-	return s.Config.CfName("AlertSystemEcsServiceRole")
-}
-
-func (s *ServiceResources) logGroupLogicalName() string {
-	return s.Config.CfName("EcsCloudWatchLogGroup")
 }
 
 func (s *ServiceResources) subnetRefs() *StringListExpr {
@@ -288,57 +204,11 @@ func (s *ServiceResources) addLoadBalancer() {
 					Value: String("30"),
 				},
 			},
-			Name:           String(s.Config.CfName("AlertSysLoadBalancer")),
+			Name:           String(s.Config.CfName("WordPressLoadBalancer")),
 			SecurityGroups: StringList(Ref(s.elbSecurityGroupLogicalName()).String()),
 			Subnets:        s.subnetRefs(),
 		},
 	)
-}
-
-func (s *ServiceResources) addElbListener() {
-	listener := Resource{
-		Properties: &ElasticLoadBalancingV2Listener{
-			Certificates: &ElasticLoadBalancingListenerCertificatesList{
-				ElasticLoadBalancingListenerCertificates{
-					CertificateArn: Ref(CertificateArnParamName).String(),
-				},
-			},
-			DefaultActions: &ElasticLoadBalancingListenerDefaultActionsList{
-				ElasticLoadBalancingListenerDefaultActions{
-					TargetGroupArn: Ref(s.elbTargetGroupLogicalName()).String(),
-					Type:           String("forward"),
-				},
-			},
-			LoadBalancerArn: Ref(s.elbLogicalName()).String(),
-			Port:            Integer(httpsPort),
-			Protocol:        String(httpsProtocol),
-		},
-	}
-
-	s.Template.Resources[s.elbListenerLogicalName()] = &listener
-}
-
-func (s *ServiceResources) addElbListenerRule() {
-	listenerRule := Resource{
-		Properties: &ElasticLoadBalancingV2ListenerRule{
-			Actions: &ElasticLoadBalancingListenerRuleActionsList{
-				ElasticLoadBalancingListenerRuleActions{
-					TargetGroupArn: Ref(s.elbTargetGroupLogicalName()).String(),
-					Type:           String("forward"),
-				},
-			},
-			Conditions: &ElasticLoadBalancingListenerRuleConditionsList{
-				ElasticLoadBalancingListenerRuleConditions{
-					Field:  String("path-pattern"),
-					Values: StringList(String("/")),
-				},
-			},
-			ListenerArn: Ref(s.elbListenerLogicalName()).String(),
-			Priority:    Integer(1),
-		},
-	}
-
-	s.Template.Resources[s.Config.CfName("HttpsListenerRule")] = &listenerRule
 }
 
 func (s *ServiceResources) addLoadBalancerSecurityGroup() {
@@ -348,22 +218,22 @@ func (s *ServiceResources) addLoadBalancerSecurityGroup() {
 			GroupDescription: String("Security group for the Application level load balancer"),
 			SecurityGroupEgress: &EC2SecurityGroupRuleList{
 				EC2SecurityGroupRule{
-					CidrIp:     String(allIps),
-					IpProtocol: String(allProtocols),
+					CidrIp:     String(AllIps),
+					IpProtocol: String(AllProtocols),
 				},
 			},
 			SecurityGroupIngress: &EC2SecurityGroupRuleList{
 				EC2SecurityGroupRule{
-					CidrIp:     String(allIps),
-					IpProtocol: String(tcpProtocol),
-					FromPort:   Integer(sshPort),
-					ToPort:     Integer(sshPort),
+					CidrIp:     String(AllIps),
+					IpProtocol: String(TcpProtocol),
+					FromPort:   Integer(SshPort),
+					ToPort:     Integer(SshPort),
 				},
 				EC2SecurityGroupRule{
-					CidrIp:     String(allIps),
-					IpProtocol: String(tcpProtocol),
-					FromPort:   Integer(httpsPort),
-					ToPort:     Integer(httpsPort),
+					CidrIp:     String(AllIps),
+					IpProtocol: String(TcpProtocol),
+					FromPort:   Integer(HttpsPort),
+					ToPort:     Integer(HttpsPort),
 				},
 			},
 			VpcId: Ref(s.vpcLogicalName()).String(),
@@ -371,29 +241,9 @@ func (s *ServiceResources) addLoadBalancerSecurityGroup() {
 	)
 }
 
-func (s *ServiceResources) addLoadBalancerTargetGroup() {
-	targetGroup := Resource{
-		DependsOn: []string{s.elbLogicalName()},
-		Properties: &ElasticLoadBalancingV2TargetGroup{
-			HealthCheckIntervalSeconds: Integer(10),
-			HealthCheckPath:            String("/"),
-			HealthCheckPort:            String(strconv.FormatInt(scalaPlayPort, 10)),
-			HealthCheckProtocol:        String(httpProtocol),
-			HealthCheckTimeoutSeconds:  Integer(5),
-			HealthyThresholdCount:      Integer(2),
-			Port:                       Integer(scalaPlayPort),
-			Protocol:                   String(httpProtocol),
-			UnhealthyThresholdCount:    Integer(2),
-			VpcId:                      Ref(s.vpcLogicalName()).String(),
-		},
-	}
-
-	s.Template.Resources[s.elbTargetGroupLogicalName()] = &targetGroup
-}
-
-func (s *ServiceResources) addEcsAsg() {
+func (s *ServiceResources) addAsg() {
 	s.Template.AddResource(
-		s.Config.CfName("EcsAutoScalingGroup"),
+		s.Config.CfName("AutoScalingGroup"),
 		&AutoScalingAutoScalingGroup{
 			AvailabilityZones:       GetAZs(s.Config.Region.StringExpr()),
 			DesiredCapacity:         String("1"),
@@ -405,7 +255,7 @@ func (s *ServiceResources) addEcsAsg() {
 	)
 }
 
-func (s *ServiceResources) addLaunchConfiguration() {
+func (s *ServiceResources) addLaunchConfiguration(ecsClusterLogicalName string) {
 	s.Template.AddResource(
 		s.launchConfigLogicalName(),
 		&AutoScalingLaunchConfiguration{
@@ -414,8 +264,8 @@ func (s *ServiceResources) addLaunchConfiguration() {
 			ImageId:            String("ami-7114c909"),
 			InstanceMonitoring: Bool(false),
 			InstanceType:       String("t2.micro"),
-			KeyName:            String("alert-sys-cf-key"),
-			SecurityGroups:     []interface{}{Ref(s.ec2SecurityGroupLogicalName()).String()},
+			KeyName:            Ref(Ec2KeyNameParamName).String(),
+			SecurityGroups:     []interface{}{s.ec2SecurityGroupRefStringExpr()},
 			UserData: Base64(Sub(String(fmt.Sprintf(
 				"#!/bin/bash -xe\n"+
 					"echo ECS_CLUSTER=${%s} >> /etc/ecs/ecs.config\n"+
@@ -424,7 +274,7 @@ func (s *ServiceResources) addLaunchConfiguration() {
 					"chown ec2-user:ec2-user /mnt/efs/\n"+
 					"mount -t nfs -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ${%s}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs/\n"+
 					"/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource ECSAutoScalingGroup\n",
-				s.ecsClusterLogicalName(), s.efsLogicalName(),
+				ecsClusterLogicalName, s.efsLogicalName(),
 			)))),
 		},
 	)
@@ -494,30 +344,19 @@ func (s *ServiceResources) addEc2SecurityGroup() {
 			GroupDescription: String("Security group for the EC2 instances running in the ECS cluster"),
 			SecurityGroupEgress: &EC2SecurityGroupRuleList{
 				EC2SecurityGroupRule{
-					CidrIp:     String(allIps),
-					IpProtocol: String(allProtocols),
+					CidrIp:     String(AllIps),
+					IpProtocol: String(AllProtocols),
 				},
 			},
 			SecurityGroupIngress: &EC2SecurityGroupRuleList{
 				EC2SecurityGroupRule{
-					CidrIp:     String(allIps),
-					IpProtocol: String(tcpProtocol),
-					FromPort:   Integer(sshPort),
-					ToPort:     Integer(sshPort),
+					CidrIp:     String(AllIps),
+					IpProtocol: String(TcpProtocol),
+					FromPort:   Integer(SshPort),
+					ToPort:     Integer(SshPort),
 				},
 			},
 			VpcId: Ref(s.vpcLogicalName()).String(),
-		},
-	)
-
-	s.Template.AddResource(
-		s.Config.CfName("EC2SecurityGroupIngressFromElb"),
-		&EC2SecurityGroupIngress{
-			GroupId:               Ref(s.ec2SecurityGroupLogicalName()).String(),
-			SourceSecurityGroupId: Ref(s.elbSecurityGroupLogicalName()).String(),
-			IpProtocol:            String(tcpProtocol),
-			FromPort:              Integer(scalaPlayPort),
-			ToPort:                Integer(scalaPlayPort),
 		},
 	)
 
@@ -525,22 +364,11 @@ func (s *ServiceResources) addEc2SecurityGroup() {
 	s.Template.AddResource(
 		s.Config.CfName("EC2SecurityGroupIngressFromElbDynamicPorts"),
 		&EC2SecurityGroupIngress{
-			GroupId:               Ref(s.ec2SecurityGroupLogicalName()).String(),
-			SourceSecurityGroupId: Ref(s.elbSecurityGroupLogicalName()).String(),
-			IpProtocol:            String(tcpProtocol),
+			GroupId:               s.ec2SecurityGroupRefStringExpr(),
+			SourceSecurityGroupId: s.ec2SecurityGroupRefStringExpr(),
+			IpProtocol:            String(TcpProtocol),
 			FromPort:              Integer(32768),
 			ToPort:                Integer(65535),
-		},
-	)
-
-	s.Template.AddResource(
-		s.Config.CfName("EC2SecurityGroupIngressForScalaPlay"),
-		&EC2SecurityGroupIngress{
-			GroupId:               Ref(s.ec2SecurityGroupLogicalName()).String(),
-			SourceSecurityGroupId: Ref(s.ec2SecurityGroupLogicalName()).String(),
-			IpProtocol:            String(tcpProtocol),
-			FromPort:              Integer(scalaPlayPort),
-			ToPort:                Integer(scalaPlayPort),
 		},
 	)
 
@@ -549,9 +377,9 @@ func (s *ServiceResources) addEc2SecurityGroup() {
 		&EC2SecurityGroupIngress{
 			GroupId:               Ref(s.ec2SecurityGroupLogicalName()).String(),
 			SourceSecurityGroupId: Ref(s.ec2SecurityGroupLogicalName()).String(),
-			IpProtocol:            String(tcpProtocol),
-			FromPort:              Integer(nfsPort),
-			ToPort:                Integer(nfsPort),
+			IpProtocol:            String(TcpProtocol),
+			FromPort:              Integer(NfsPort),
+			ToPort:                Integer(NfsPort),
 		},
 	)
 }
@@ -585,7 +413,7 @@ func (s *ServiceResources) addInternetGateway() {
 	s.Template.AddResource(
 		s.internetGatewayLogicalName(),
 		&EC2InternetGateway{
-			Tags: []ResourceTag{{Key: String("StackName"), Value: s.stackName().String()}},
+			Tags: []ResourceTag{{Key: String("StackName"), Value: Ref("AWS::StackName").String()}},
 		},
 	)
 }
@@ -614,7 +442,7 @@ func (s *ServiceResources) addPublicRoute() {
 		DependsOn: []string{s.internetGatewayAttachmentLogicalName()},
 		Properties: &EC2Route{
 			RouteTableId:         Ref(s.routeTableLogicalName()).String(),
-			DestinationCidrBlock: String(allIps),
+			DestinationCidrBlock: String(AllIps),
 			GatewayId:            Ref(s.internetGatewayLogicalName()).String(),
 		},
 	}
@@ -631,34 +459,6 @@ func (s *ServiceResources) addSubnetRouteTableAssociations() {
 			},
 		)
 	}
-}
-
-func (s *ServiceResources) addEcsService() {
-	serviceResource := Resource{
-		DependsOn: []string{s.elbListenerLogicalName()},
-		Properties: &ECSService{
-			Cluster:      Ref(s.ecsClusterLogicalName()).String(),
-			DesiredCount: Integer(1),
-			LoadBalancers: &EC2ContainerServiceServiceLoadBalancersList{
-				EC2ContainerServiceServiceLoadBalancers{
-					ContainerName:  String(s.ecsServiceContainerName()),
-					ContainerPort:  Integer(scalaPlayPort),
-					TargetGroupArn: Ref(s.elbTargetGroupLogicalName()).String(),
-				},
-			},
-			Role:           Ref(s.ecsServiceRoleLogicalName()).String(),
-			TaskDefinition: Ref(s.ecsTaskDefLogicalName()).String(),
-		},
-	}
-
-	s.Template.Resources[s.Config.CfName("EcsService")] = &serviceResource
-}
-
-func (s *ServiceResources) addEcsCluster() {
-	s.Template.AddResource(
-		s.ecsClusterLogicalName(),
-		&ECSCluster{}, // purposefully empty, nothing should be specified
-	)
 }
 
 func (s *ServiceResources) addEfsVolume() {
@@ -682,151 +482,4 @@ func (s *ServiceResources) addEfsMountTargets() {
 			},
 		)
 	}
-}
-
-func (s *ServiceResources) addEcsTaskDef() {
-	s.Template.AddResource(
-		s.ecsTaskDefLogicalName(),
-		&ECSTaskDefinition{
-			ContainerDefinitions: &EC2ContainerServiceTaskDefinitionContainerDefinitionsList{
-				*s.alertServiceContainerDef(),
-				*s.databaseContainerDef(),
-			},
-			Volumes: &EC2ContainerServiceTaskDefinitionVolumesList{
-				EC2ContainerServiceTaskDefinitionVolumes{
-					Name: databaseEcsVolumeName,
-					Host: &EC2ContainerServiceTaskDefinitionVolumesHost{
-						SourcePath: String("/mnt/efs/mysql/"),
-					},
-				},
-			},
-		},
-	)
-}
-
-func (s *ServiceResources) alertServiceContainerDef() *EC2ContainerServiceTaskDefinitionContainerDefinitions {
-	return &EC2ContainerServiceTaskDefinitionContainerDefinitions{
-		Cpu: Integer(oneCpu / 4 * 3),
-		Environment: &EC2ContainerServiceTaskDefinitionContainerDefinitionsEnvironmentList{
-			{
-				Name:  String("TWILIO_USERNAME"),
-				Value: Ref(TwilioUserParamName).String(),
-			},
-			{
-				Name:  String("TWILIO_PASSWORD"),
-				Value: Ref(TwilioPasswordParamName).String(),
-			},
-			{
-				Name:  String("TWILIO_PHONE"),
-				Value: Ref(TwilioPhoneParamName).String(),
-			},
-			{
-				Name:  String("PLAY_SECRET_KEY"),
-				Value: Ref(PlayFwkSecretKeyParamName).String(),
-			},
-		},
-		Essential:        Bool(true),
-		Name:             String(s.ecsServiceContainerName()),
-		Image:            String("errorsandglitches/dockerscalasmsalertsystem"),
-		Links:            StringList(String(fmt.Sprintf("%s:mysql", databaseContainerName))),
-		LogConfiguration: s.ecsLogConfig(),
-		Memory:           Integer(memoryPerInstanceMb / 4 * 3),
-		PortMappings: &EC2ContainerServiceTaskDefinitionContainerDefinitionsPortMappingsList{
-			EC2ContainerServiceTaskDefinitionContainerDefinitionsPortMappings{
-				ContainerPort: Integer(scalaPlayPort),
-				HostPort:      Integer(scalaPlayPort),
-				Protocol:      String(tcpProtocol),
-			},
-		},
-	}
-}
-
-func (s *ServiceResources) databaseContainerDef() *EC2ContainerServiceTaskDefinitionContainerDefinitions {
-	return &EC2ContainerServiceTaskDefinitionContainerDefinitions{
-		Cpu:       Integer(oneCpu / 4 * 1),
-		Essential: Bool(true),
-		Environment: &EC2ContainerServiceTaskDefinitionContainerDefinitionsEnvironmentList{
-			EC2ContainerServiceTaskDefinitionContainerDefinitionsEnvironment{
-				Name:  String("MYSQL_ROOT_PASSWORD"),
-				Value: Ref(MysqlPasswordParamName).String(),
-			},
-		},
-		Name:             String(databaseContainerName),
-		Image:            String("mariadb:10.3.2"),
-		LogConfiguration: s.ecsLogConfig(),
-		Memory:           Integer(memoryPerInstanceMb / 4 * 1),
-		MountPoints: &EC2ContainerServiceTaskDefinitionContainerDefinitionsMountPointsList{
-			EC2ContainerServiceTaskDefinitionContainerDefinitionsMountPoints{
-				ContainerPath: String("/var/lib/mysql"),
-				SourceVolume:  databaseEcsVolumeName,
-			},
-		},
-	}
-}
-
-func (s *ServiceResources) ecsLogConfig() *EC2ContainerServiceTaskDefinitionContainerDefinitionsLogConfiguration {
-	return &EC2ContainerServiceTaskDefinitionContainerDefinitionsLogConfiguration{
-		LogDriver: String("awslogs"),
-		Options: map[string]interface{}{
-			"awslogs-group":         Ref(s.logGroupLogicalName()),
-			"awslogs-region":        s.region(),
-			"awslogs-stream-prefix": "alert-system",
-		},
-	}
-}
-
-func (s *ServiceResources) addLogGroup() {
-	s.Template.AddResource(
-		s.logGroupLogicalName(),
-		&LogsLogGroup{
-			LogGroupName:    Join("-", s.stackName(), String("AlertSystem"), s.Config.Stage.StringExpr()),
-			RetentionInDays: Integer(14),
-		},
-	)
-}
-
-func (s *ServiceResources) addEcsServiceRole() {
-	s.Template.AddResource(
-		s.ecsServiceRoleLogicalName(),
-		&IAMRole{
-			AssumeRolePolicyDocument: `{
-                "Statement":[
-                {
-                  "Effect":"Allow",
-                  "Principal":{
-                    "Service":[
-                      "ecs.amazonaws.com"
-                    ]
-                  },
-                  "Action":[
-                    "sts:AssumeRole"
-                  ]
-                }
-              ]
-            }`,
-			Path: String("/"),
-			Policies: &IAMPoliciesList{
-				IAMPolicies{
-					PolicyName: String("ecs-service-policy"),
-					PolicyDocument: `{
-                        "Statement":[
-                            {
-                              "Effect":"Allow",
-                              "Action":[
-                                "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
-                                "elasticloadbalancing:DeregisterTargets",
-                                "elasticloadbalancing:Describe*",
-                                "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
-                                "elasticloadbalancing:RegisterTargets",
-                                "ec2:Describe*",
-                                "ec2:AuthorizeSecurityGroupIngress"
-                               ],
-                               "Resource":"*"
-                            }
-                        ]
-                    }`,
-				},
-			},
-		},
-	)
 }

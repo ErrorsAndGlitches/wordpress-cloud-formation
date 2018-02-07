@@ -1,4 +1,4 @@
-package services
+package actions
 
 import (
 	"github.com/aws/aws-sdk-go/service/route53domains"

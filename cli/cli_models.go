@@ -3,7 +3,7 @@ package cli
 import (
 	"github.com/urfave/cli"
 	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
-	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/services"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/actions"
 )
 
 var defaultProfile = "default"
@@ -18,8 +18,8 @@ func (cm *CliModels) CloudFormationClient() *CloudFormationClient {
 	}
 }
 
-func (cm *CliModels) AlertSysConfig() *AlertSysConfig {
-	config := AlertSysConfig{
+func (cm *CliModels) AlertSysConfig() *TemplateConfig {
+	config := TemplateConfig{
 		Region: cm.awsRegion(),
 		Stage:  StageFromString(StageCliOpt.Value(cm.Context)),
 	}

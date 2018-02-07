@@ -1,4 +1,4 @@
-package services
+package actions
 
 import (
 	"github.com/aws/aws-sdk-go/service/acm"
@@ -78,12 +78,13 @@ func (sslCerts *SslCertificateRequest) resourceRecord(certArn *string) *acm.Reso
 			resourceRecord = domainValidationOpt.ResourceRecord
 			return nil
 		},
-		retry.Delay(40 * time.Second), // this time is whack - it's actually about 4 seconds on my computer
+		retry.Delay(4),
+		retry.Units(time.Second),
 		retry.Attempts(sslMaxAttempts),
 	)
 
 	if resultError != nil {
-		panic("Unable to retrieve the ResourceRecord!")
+		panic("Unable to retrieve the ResourceRecord! This means the hosted zone was not updated!")
 	}
 
 	return resourceRecord

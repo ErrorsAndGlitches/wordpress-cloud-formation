@@ -6,7 +6,7 @@ import (
 )
 
 // A configuration needed to build the cloud formation template.
-type AlertSysConfig struct {
+type TemplateConfig struct {
 	*Stage
 	Region *Region
 }

@@ -34,30 +34,6 @@ var DbPasswordCliOpt = CommandStringCliOption{&StringCliOptionImpl{
 	Usage:    "Password to use for the mysql database",
 }}
 
-var TwilioUserCliOpt = CommandStringCliOption{&StringCliOptionImpl{
-	LongOpt:  "twilio-user",
-	ShortOpt: "t",
-	Usage:    "Twilio account user name",
-}}
-
-var TwilioPasswordCliOpt = CommandStringCliOption{&StringCliOptionImpl{
-	LongOpt:  "twilio-password",
-	ShortOpt: "w",
-	Usage:    "Twilio account password",
-}}
-
-var TwilioPhoneCliOpt = CommandStringCliOption{&StringCliOptionImpl{
-	LongOpt:  "twilio-phone-number",
-	ShortOpt: "n",
-	Usage:    "Twilio account phone number",
-}}
-
-var PlayFrameworkSecretCliOpt = CommandStringCliOption{&StringCliOptionImpl{
-	LongOpt:  "play-framework-secret",
-	ShortOpt: "f",
-	Usage:    "A secret for the Play Framework to use. It can be anything.",
-}}
-
 var DomainCliOpt = CommandStringCliOption{&StringCliOptionImpl{
 	LongOpt:  "domain-name",
 	ShortOpt: "d",
@@ -86,6 +62,18 @@ var ElbHostedZoneCliOpt = CommandStringCliOption{&StringCliOptionImpl{
 	LongOpt:  "elb-hosted-zone",
 	ShortOpt: "n",
 	Usage:    "Hosted zone of the Elastic Load Balancer",
+}}
+
+var Ec2KeyNameCliOpt = CommandStringCliOption{&StringCliOptionImpl{
+	LongOpt:  "ec2-key-name",
+	ShortOpt: "k",
+	Usage:    "SSH key name for logging into the generated EC2 instances",
+}}
+
+var WordPressSubDomainsOpt = CommandStringCliOption{&StringCliOptionImpl{
+	LongOpt:  "word-press-sub-domains",
+	ShortOpt: "w",
+	Usage:    "Colon separated list of WordPress sub-domains.",
 }}
 
 // For registering domain name

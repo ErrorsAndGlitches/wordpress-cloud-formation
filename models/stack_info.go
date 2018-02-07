@@ -2,10 +2,10 @@ package models
 
 import "fmt"
 
-const serviceStackTemplateFileName = "./alert-sys-service-cf-%s.json"
-const serviceStackName = "colectiva-alert-system-service"
+const serviceStackTemplateFileName = "./wp-service-cf-%s.json"
+const serviceStackName = "wp-system-service"
 
-func ServiceStackInfo(config *AlertSysConfig) *StackInfo {
+func ServiceStackInfo(config *TemplateConfig) *StackInfo {
 	return &StackInfo{
 		config:        config,
 		baseStackName: serviceStackName,
@@ -14,7 +14,7 @@ func ServiceStackInfo(config *AlertSysConfig) *StackInfo {
 }
 
 type StackInfo struct {
-	config        *AlertSysConfig
+	config        *TemplateConfig
 	baseStackName string
 	baseFileName  string
 }

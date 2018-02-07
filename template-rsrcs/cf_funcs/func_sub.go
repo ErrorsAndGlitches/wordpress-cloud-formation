@@ -1,4 +1,4 @@
-package template_rsrcs
+package cf_funcs
 
 import (
 	. "github.com/crewjam/go-cloudformation"

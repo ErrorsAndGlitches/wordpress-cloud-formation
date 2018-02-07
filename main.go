@@ -2,7 +2,7 @@ package main
 
 import (
 	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/cli"
-	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/services"
+	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/actions"
 	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/models"
 	. "github.com/ErrorsAndGlitches/wordpress-cloud-formation/template-rsrcs"
 	. "github.com/crewjam/go-cloudformation"
@@ -10,9 +10,11 @@ import (
 	"os"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/acm"
+	"strings"
 )
 
 var actionSuccess error = nil
+var wordPressSeparator = ":"
 
 func main() {
 	app := cli.NewApp()
@@ -137,16 +139,6 @@ func main() {
 							},
 						}).Output().(*acm.DescribeCertificateOutput).Certificate
 
-						for _, validationOpt := range certDetail.DomainValidationOptions {
-							SugaredLogger().Infow(
-								"Certificate validation status",
-								"Cert ARN", *certDetail.CertificateArn,
-								"Domain Name", *validationOpt.DomainName,
-								"Validation Method", *validationOpt.ValidationMethod,
-								"Validation Status", *validationOpt.ValidationStatus,
-							)
-						}
-
 						SugaredLogger().Infow(
 							"Certification status",
 							"Cert ARN", *certDetail.CertificateArn,
@@ -160,17 +152,15 @@ func main() {
 			Name:  "cf-service",
 			Usage: "CloudFormation operations on the service stack",
 			Subcommands: (&CloudFormationSubCommand{
-				writeFlags:        []cli.Flag{StageCliOpt.Flag()},
-				writeRequiredOpts: []StringCliOption{&StageCliOpt},
+				writeFlags:        []cli.Flag{StageCliOpt.Flag(), WordPressSubDomainsOpt.Flag()},
+				writeRequiredOpts: []StringCliOption{&StageCliOpt, &WordPressSubDomainsOpt},
 				createFlags: []cli.Flag{
-					DomainCliOpt.Flag(), DbPasswordCliOpt.Flag(), SslArnCliOpt.Flag(),
-					TwilioUserCliOpt.Flag(), TwilioPasswordCliOpt.Flag(), TwilioPhoneCliOpt.Flag(),
-					PlayFrameworkSecretCliOpt.Flag(),
+					DomainCliOpt.Flag(), DbPasswordCliOpt.Flag(), SslArnCliOpt.Flag(), Ec2KeyNameCliOpt.Flag(),
+					WordPressSubDomainsOpt.Flag(),
 				},
 				createRequiredOpts: []StringCliOption{
-					&StageCliOpt, &DomainCliOpt, &DbPasswordCliOpt, &SslArnCliOpt,
-					&TwilioUserCliOpt, &TwilioPasswordCliOpt, &TwilioPhoneCliOpt,
-					&PlayFrameworkSecretCliOpt,
+					&StageCliOpt, &DbPasswordCliOpt, &DomainCliOpt, &SslArnCliOpt, &WordPressSubDomainsOpt,
+					&Ec2KeyNameCliOpt,
 				},
 				stackInfo: func(context *cli.Context) *StackInfo {
 					return ServiceStackInfo((&CliModels{Context: context}).AlertSysConfig())
@@ -180,9 +170,10 @@ func main() {
 					cliModels := CliModels{Context: context}
 
 					(&ServiceResources{
-						Template: t,
-						Config:   cliModels.AlertSysConfig(),
-						AZs:      cliModels.Aws().Azs(),
+						Template:            t,
+						Config:              cliModels.AlertSysConfig(),
+						AZs:                 cliModels.Aws().Azs(),
+						WordPressSubDomains: strings.Split(WordPressSubDomainsOpt.Value(context), wordPressSeparator),
 					}).AddToTemplate()
 
 					return t
@@ -194,10 +185,7 @@ func main() {
 						DbPasswordCliOpt.Value(context),
 						DomainCliOpt.Value(context),
 						SslArnCliOpt.Value(context),
-						TwilioUserCliOpt.Value(context),
-						TwilioPasswordCliOpt.Value(context),
-						TwilioPhoneCliOpt.Value(context),
-						PlayFrameworkSecretCliOpt.Value(context),
+						Ec2KeyNameCliOpt.Value(context),
 					)
 				},
 			}).SubCommands(),
@@ -207,11 +195,15 @@ func main() {
 			Usage: "Create an alias from the domain name to the ELB public domain name",
 			Flags: []cli.Flag{
 				DomainCliOpt.Flag(), HostedZoneIdCliOpt.Flag(), ElbDomainNameCliOpt.Flag(), ElbHostedZoneCliOpt.Flag(),
+				WordPressSubDomainsOpt.Flag(),
 			},
 			Action: func(c *cli.Context) error {
 				return runIfRequiredOptions(
 					c,
-					[]StringCliOption{&DomainCliOpt, &HostedZoneIdCliOpt, &ElbDomainNameCliOpt, &ElbHostedZoneCliOpt},
+					[]StringCliOption{
+						&DomainCliOpt, &HostedZoneIdCliOpt, &ElbDomainNameCliOpt, &ElbHostedZoneCliOpt,
+						&WordPressSubDomainsOpt,
+					},
 					func() {
 						NewAliasRecord(
 							(&CliModels{Context: c}).Aws().Route53(),
@@ -219,6 +211,7 @@ func main() {
 							HostedZoneIdCliOpt.Value(c),
 							ElbDomainNameCliOpt.Value(c),
 							ElbHostedZoneCliOpt.Value(c),
+							strings.Split(WordPressSubDomainsOpt.Value(c), wordPressSeparator),
 						).Create()
 					},
 				)
