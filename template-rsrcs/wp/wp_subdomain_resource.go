@@ -98,7 +98,7 @@ func (wpr *wpSubdomainResource) addLoadBalancerTargetGroup() {
 			HealthCheckTimeoutSeconds:  Integer(5),
 			HealthyThresholdCount:      Integer(2),
 			Matcher: &ElasticLoadBalancingTargetGroupMatcher{
-				HttpCode: String("200,302"),
+				HttpCode: String("200,301,302"),
 			},
 			Port:                       Integer(wpr.port),
 			Protocol:                   String(HttpProtocol),

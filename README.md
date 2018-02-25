@@ -222,8 +222,9 @@ export DEBUG=1
 ## Gotchas
 
 * Note that the **Registrant Contact** in Route 53 Domains is also known as the **Bill Contact**.
-* The target group health checks deem both `200` and `302` as health return codes. This is because when Wordpress first
-  starts up, all traffic is redirected to the path `/wp-admin/install.php`.
+* The target group health checks deem `200`, `301`, and `302` as health return codes. This is because when Wordpress first
+  starts up, the root path is redirected (`302`) to the path `/wp-admin/install.php` and after installation, the root
+  path is permanently moved (`301`). To where? I have no idea, because the site still goes to the root path.
 * If you mess up the Route 53 record set, you should delete it and create a new one to force the changes to be
   propagated. Otherwise, you are at the mercy of the TTL.
 
