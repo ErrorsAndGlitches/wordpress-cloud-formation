@@ -12,6 +12,8 @@ import (
 )
 
 var numSubnets = 3
+var volumeSizeGiB = int64(8)
+var ssdVolumeType = "gp2"
 
 type ServiceParameters struct {
 	Config *TemplateConfig
@@ -259,6 +261,15 @@ func (s *ServiceResources) addLaunchConfiguration(ecsClusterLogicalName string) 
 	s.Template.AddResource(
 		s.launchConfigLogicalName(),
 		&AutoScalingLaunchConfiguration{
+			BlockDeviceMappings: &AutoScalingBlockDeviceMappingList{
+				{
+					DeviceName: String("/dev/xvda"),
+					Ebs: &AutoScalingEBSBlockDevice{
+						VolumeSize: Integer(volumeSizeGiB),
+						VolumeType: String(ssdVolumeType),
+					},
+				},
+			},
 			IamInstanceProfile: Ref(s.ec2InstanceProfileLogicalName()).String(),
 			// see ECS optimized AMIs: http://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-optimized_AMI.html
 			ImageId:            String("ami-7114c909"),
