@@ -96,6 +96,7 @@ func (s *ServiceResources) AddToTemplate() {
 	s.addLoadBalancer()
 	s.addLoadBalancerSecurityGroup()
 	s.addEfsVolume()
+	s.addEfsMountTargets()
 
 	// add wp stuff here
 	wpResources := wp.NewWordPressResources(
