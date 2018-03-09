@@ -83,6 +83,10 @@ func (wpr *wpSubdomainResource) dbDockerVolumeName() string {
 	return wpr.config.CfName(fmt.Sprintf("MySqlVolume%s", wpr.subdomain))
 }
 
+func (wpr *wpSubdomainResource) wpContentDockerVolumeName() string {
+	return wpr.config.CfName(fmt.Sprintf("WpContentVolume%s", wpr.subdomain))
+}
+
 func (wpr *wpSubdomainResource) dbContainerName() string {
 	return wpr.config.CfName(fmt.Sprintf("MariaDbContainer%s", wpr.subdomain))
 }
@@ -200,6 +204,12 @@ func (wpr *wpSubdomainResource) addWpTaskDef() {
 						SourcePath: String(fmt.Sprintf("/mnt/efs/%s/mysql/", wpr.subdomain)),
 					},
 				},
+				EC2ContainerServiceTaskDefinitionVolumes{
+					Name: String(wpr.wpContentDockerVolumeName()),
+					Host: &EC2ContainerServiceTaskDefinitionVolumesHost{
+						SourcePath: String(fmt.Sprintf("/mnt/efs/%s/wp-content/", wpr.subdomain)),
+					},
+				},
 			},
 		},
 	)
@@ -219,6 +229,12 @@ func (wpr *wpSubdomainResource) wordpressContainerDef() EC2ContainerServiceTaskD
 		Links:            StringList(String(fmt.Sprintf("%s:mysql", wpr.dbContainerName()))),
 		LogConfiguration: wpr.ecsLogConfig(),
 		Memory:           Integer(wpr.memoryMb),
+		MountPoints: &EC2ContainerServiceTaskDefinitionContainerDefinitionsMountPointsList{
+			EC2ContainerServiceTaskDefinitionContainerDefinitionsMountPoints{
+				ContainerPath: String("/var/www/html/wp-content"),
+				SourceVolume:  String(wpr.wpContentDockerVolumeName()),
+			},
+		},
 		Name:             String(wpr.wpServiceContainerName()),
 		PortMappings: &EC2ContainerServiceTaskDefinitionContainerDefinitionsPortMappingsList{
 			{
